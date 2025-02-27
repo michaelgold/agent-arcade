@@ -174,8 +174,20 @@ class PongGame(GameInterface):
         """Train an agent for this game."""
         config = self.load_config(config_path)
         
-        # For demonstration purposes with rendering, use a single environment
-        if render:
+        if not render:
+            # Optimize number of environments based on available CPU cores
+            import multiprocessing
+            num_envs = min(multiprocessing.cpu_count(), 8)  # Use up to 8 environments
+            env = DummyVecEnv([lambda: self._make_env(render, config) for _ in range(num_envs)])
+            env = VecFrameStack(env, n_stack=4, channels_order='first')
+            
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            buffer_size = config.buffer_size
+            total_timesteps = config.total_timesteps
+            
+            # Optimize network architecture
+            net_arch = [512, 512]  # Simplified architecture
+        else:
             # Create a single environment for better rendering support
             env = self._make_env(render, config)
             
@@ -193,53 +205,38 @@ class PongGame(GameInterface):
             env = VecFrameStack(env, n_stack=4, channels_order='first')
             
             # Use CPU for rendering compatibility
-            device = "cpu"
+            device = "cuda" if torch.cuda.is_available() else "cpu"
             # Reduce buffer size for demo purposes to avoid memory issues
             buffer_size = min(config.buffer_size, 50000)
             logger.info("Using reduced settings for rendering demo")
             
             # For demo, use much smaller number of steps
             total_timesteps = min(config.total_timesteps, 50000)
-        else:
-            # Create multiple environments for faster training when not rendering
-            def make_env():
-                return self._make_env(render, config)
-            
-            # Use fewer environments to save memory
-            num_envs = 8  # Reduced from 16 to save memory
-            env = DummyVecEnv([make_env for _ in range(num_envs)])
-            env = VecFrameStack(env, n_stack=4, channels_order='first')
-            
-            # Use GPU for training when not rendering
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            buffer_size = config.buffer_size
-            total_timesteps = config.total_timesteps
         
         logger.debug(f"Training observation space: {env.observation_space}")
         logger.info(f"Training on device: {device} with {total_timesteps} timesteps")
         
-        # Create and train the model with adjusted parameters
+        # Update model configuration
         model = DQN(
             "CnnPolicy",
             env,
             learning_rate=config.learning_rate,
             buffer_size=buffer_size,
-            learning_starts=min(config.learning_starts, 1000) if render else config.learning_starts,
-            batch_size=min(config.batch_size, 256) if render else config.batch_size,  # Smaller batch for demo
+            learning_starts=config.learning_starts,
+            batch_size=config.batch_size,
             exploration_fraction=config.exploration_fraction,
             target_update_interval=config.target_update_interval,
             tensorboard_log=f"./tensorboard/{self.name}" if config.tensorboard_log else None,
             policy_kwargs={
-                "net_arch": [256, 256] if render else [1024, 1024],  # Much smaller network for demo
-                "normalize_images": False,  # Images already normalized
+                "net_arch": net_arch,
+                "normalize_images": False,
                 "optimizer_class": torch.optim.Adam,
                 "optimizer_kwargs": {
                     "eps": 1e-5,
-                    "weight_decay": 1e-6
-                }
+                }  # Removed weight_decay for faster training
             },
-            train_freq=(4, "step"),
-            gradient_steps=1 if render else 4,  # Reduced for demo
+            train_freq=(1, "step"),  # More frequent updates
+            gradient_steps=1,
             verbose=1,
             device=device
         )

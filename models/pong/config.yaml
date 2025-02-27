@@ -1,18 +1,18 @@
 # Training configuration for pong
 # Core training parameters
-total_timesteps: 10000000
-learning_rate: 0.0001
-buffer_size: 100000
-learning_starts: 10000
-batch_size: 64
-exploration_fraction: 0.3
+total_timesteps: 5000000
+learning_rate: 0.00025
+buffer_size: 500000
+learning_starts: 5000
+batch_size: 512
+exploration_fraction: 0.2
 target_update_interval: 1000
 frame_stack: 4
 
 # Network architecture
 policy: "CnnPolicy"
 features_extractor: "NatureCNN"
-features_dim: 512
+features_dim: 256
 
 # Preprocessing
 normalize_images: true
@@ -30,5 +30,5 @@ render_eval: false
 
 # Logging
 tensorboard_log: true
-save_freq: 100000
-log_interval: 1000
+save_freq: 50000
+log_interval: 100
